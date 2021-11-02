@@ -1,81 +1,129 @@
 import requests
 import config as cfg
 import json
+import csv
+from BackupEntry_Class import BackupEntry as BE
 
-api = cfg.api["server"]
-names = ["ASGSPBCS01", "BandM-Siris4", "CDJGSPBCS01", "DYCOSGSPBCS01", "GCGSPBCS01", "GCRAGSPBCS01", "JITGSPBCS01", "KSGSPBCS02", "LMGSPBCS", "MEIGSPBCS02",
-"MEITXNAS1", "PINNGSPBCS01", "PREGGSPBCS02", "PROSRCBCS1", 'RESGSPBCS01', 'SCBARCAEBCS02', 'THRGSPBCS01', ]
+
+
 
 
 def main():
-    deviceList = createDeviceDictList()
+    ticket = createBackupCheckTicket("tech")
+    deviceList = createDeviceDictList("tech")
+
     deviceList = getDeviceSerials(deviceList)
 
-    for asset in deviceList:
-        if(asset["serialNumber"] != "Not Found"):
-            asset["alerts"] = getAlerts(asset["serialNumber"])
+    for device in deviceList:
+        if(device.serial != "None"):
+            device.alerts = getAlerts(device.serial)
+
+    addTasks(deviceList, ticket)
+
+def createBackupCheckTicket(team):
+    """Creates a new ticket in Connectwise Manage on the current team's board. Returns the ticket number
+
+    Args:
+        team ([string]): The current team that the check is being done on
+
+    Returns:
+        [string]: The manage ticket #
+    """
+
+    # Json template for a new ticket to be generated
+    # summary, [board][name], [contact][name][contactEmailAddress], [team][name], and [initial description]
+    # need to be set
+    ticketTemplate = json.load(open("./templates/newCheckTemplate.json"))
 
 
+    ticketTemplate["summary"]             = "Test For backup tickets"
+    ticketTemplate["board"]["name"]       = cfg.ticket[team]["board"]
+    ticketTemplate["contact"]["name"]     = cfg.ticket[team]["name"]
+    ticketTemplate["contactEmailAddress"] = cfg.ticket[team]["email"]
+    ticketTemplate["team"]["name"]        = cfg.ticket[team]["team"]
+    ticketTemplate["initialDescription"]  = "Testing the backup tickets"
 
-    for x in deviceList:
-        print(x)
-        
-     
- 
+    # API call returns as int, so must be cast as string to be added to endpoints
+    return str(managePostAPICall(json.dumps(ticketTemplate), "service/tickets/"))
 
+
+def createDeviceDictList(team):
+    """Reads a CSV file with the corresponding team name that contains client name
+    backup provider, and appliance name. Creates a BackupEntry object (found in BackupEntry_Class.py)
+    and appends it to a list
+
+    Args:
+        team (string): string of the team name (alpha, bravo, charlie, tech)
+
+    Returns:
+        list: list of BackupEntry Objects
+    """
+    # Initiate list object to hold the devices
+    list = []
+
+    # Team name passed as arg, should match up with .csv of clients in /Clients/
+    filename = "./Clients/" + team + ".csv"
+
+    # Open the csv file
+    with open(filename, 'r') as csvfile:
+        csvreader = csv.reader(csvfile)
+
+        # Skip the header row
+        next(csvreader)
+
+        # Cycle through each row of the csv file
+        for row in csvreader:
+            client = row[0]
+            service = str(row[1])
+            name = str(row[2])
+
+            # create new object and add to list
+            list.append(BE(client, service, name))
 
             
-
-#                     # Alerts Is a list of dicts in followin format
-#                     # 
-#                     # [[{'name': 'test', 
-#                     #    'errors': [{'timestamp': '1970-01-01T00:00:00+00:00', 
-#                     #             'Status':'failure' 
-#                     #             'error': None}]
-#                     # }
-#                     # ]]
-#                     #                  
-
-def createDeviceDictList():
-    list = []
-    for device in names:
-        entry = {
-            "name":device,
-            "serialNumber": "Not Found",
-            "alerts": "None"
-        }
-        list.append(entry)
 
     return list
 
 # Returns a dict of names:serial numbers
 def getDeviceSerials(deviceList):
-    serialDict = {}
-    endpoint = api + "/bcdr/device?_page=1&_perPage=200&showHiddenDevices=0"
+    """Takes the list of BackupEntry objects, performs an API call to get the list of devices from Datto
+    and updates the objects with the correct serial numbers. Returns the updated list
 
-    res = requests.get(endpoint, auth=(cfg.api["public"], cfg.api["private"]))
-    status = statusCheck(res.status_code)
+    Args:
+        deviceList [list.BE]: List of BackupEntry (BE) objects
 
-    if(status != True):
-        print (status)
-        return False
+    Returns:
+        [list.BE]: List of BackupEntry (BE) objects
+    """
 
-    j = res.json()
+    endpoint = "/bcdr/device?_page=1&_perPage=200&showHiddenDevices=0"
+    # datto API call. Returns JSON results
+    j = dattoAPICall(endpoint)
 
-    # Creates a dict of device names and their serial numbers
+    # TODO: There has to be a more efficient way to do this
+    # Iterate through all devices returned by API call
     for asset in j["items"]:
+        # Iterate through all BackupEntries in current check. If name == current device, set serial number
         for device in deviceList:
-            if (device["name"] == asset["name"]):
-                device["serialNumber"] = asset["serialNumber"]
+            if(device.service == "datto"):
+                if (device.backup == asset["name"]):
+                    device.serial = asset["serialNumber"]
 
     return deviceList
 
 def getAlerts(serial):
-    endpoint = api + "/bcdr/device/"+ serial + "/asset"
+    """Takes the serial number of a device, performs an API call to get info of all available agents, and returns a list of dicts 
+    for each. The dict contains 2 lists, "backupErrors" and "localErrors".
 
-    res = requests.get(endpoint, auth=(cfg.api["public"], cfg.api["private"]))
+    Args:
+        serial ([string]): serial number of the backup device
 
-    assets = res.json()
+    Returns:
+        list.dict: List of dicts with keys "backupErrors" and "localErrors". Values are lists of errors
+    """
+    endpoint = "/bcdr/device/"+ serial + "/asset"
+
+    assets = dattoAPICall(endpoint)
 
     # Loop through all devices that are backed up
     failures = []
@@ -87,24 +135,44 @@ def getAlerts(serial):
             # Check available backups for issues
             alerts = checkBackups(device)
 
-            if(alerts != "None"):
-                x = {
-                    "name":device["name"],
-                    "errors": alerts
-                }
 
+            if(len(alerts["backup"]) > 0):
+                backupErrors = alerts["backup"]
+            else:
+                backupErrors = "No Errors"
+
+            if(len(alerts["local"]) == len(assets)):
+                localErrors = "NA"
+            elif(len(alerts["local"]) > 0):
+                localErrors = alerts["local"]
+            else:
+                localErrors = "No Errors"
+
+
+            x = {
+                "name":device["name"],
+                "backupErrors": backupErrors,
+                "localErrors": localErrors
+            }
+
+            if(backupErrors != "No Errors" and localErrors != "No Errors"):
                 failures.append(x)
 
-    if(len(failures) > 0):
-        return failures
-    else:
-        return "None"
+    return failures
             
-    
-
 def checkBackups(device):   
-    # Initiate empty list to hold error dicts
-    errorList = []
+    # TODO: Add Time of latest error and check against current time to not report on resolved issues
+
+
+
+    # Initiate empty lists to hold error dicts
+    errorList       = {
+        "backup": "None",
+        "local": "None"
+    }
+    backupErrorList = []
+    localErrorList  = []
+
     for backup in device["backups"]:
         if(backup["backup"]["status"] == "failure"):
             # Create a dict with error components to be added to error list
@@ -118,21 +186,135 @@ def checkBackups(device):
 
             error = {
                 "timestamp": backup["timestamp"],
-                "Status": backup["backup"]["status"],
+                "status": backup["backup"]["status"],
                 "error": backup["backup"]["errorMessage"],
                 "screenshot": screenshot
             }
 
-            errorList.append(error)
+            backupErrorList.append(error)
+
+        # If the backup was successfull, check local verification
+        else:
+            if(backup["localVerification"]["status"] == "failure"):
+                if (backup["advancedVerification"]["screenshotVerification"] == None):
+                    screenshot = "None"
+                else:
+                    screenshot = backup["advancedVerification"]["screenshotVerification"]["image"]
+
+                error = {
+                "timestamp": backup["timestamp"],
+                "status": backup["localVerification"]["status"],
+                "error": backup["localVerification"]["errors"],
+                "screenshot": screenshot
+                }
+
+                localErrorList.append(error)
+
+    errorList["backup"] = backupErrorList
+    errorList["local"]  = localErrorList
+    return errorList
+
+def dattoAPICall(endpoint):
+    try:
+        r = requests.get(cfg.datto_api["server"] + endpoint, auth=(cfg.datto_api["public"], cfg.datto_api["private"]))
+        r.raise_for_status()
+    except:
+        print(r.text)
+        raise
+
+    return r.json()
+
+def manageGetAPICall(endpoint):
+    try:
+        r = requests.get(cfg.manage_api["server"] + endpoint, headers=cfg.manage_api["header"])
+        # request has been made
+        r.raise_for_status()
+    except:
+        print(r.text)
+        raise
+
+    return r.json()
+
+   
+
+def managePostAPICall(payload, endpoint):
+    """Takes a json payload and api endpoint and performs a POST action to the manage server. Returns POST Id
+
+    Args:
+        payload (json): Json to be posted to manage
+        endpoint (string): API endpoint added to URL
+
+    Returns:
+        int: returns the ID of the post. (ticket # for new ticket, task # for new task)
+    """
+    try:
+        r = requests.post(cfg.manage_api["server"] + endpoint, headers=cfg.manage_api["header"], data=payload)
+        # request has been made
+        r.raise_for_status()
+    except:
+        print(type(payload))
+        print(r.text)
+        raise
+    j = r.json()
+    return j["id"]
+
+def addTasks(deviceList, ticket):
+    """Takes a json payload and api endpoint and performs a POST action to the manage server. Returns POST Id
+
+    Args:
+        payload (json): Json to be posted to manage
+        endpoint (string): API endpoint added to URL
+
+    Returns:
+        int: returns the ID of the post. (ticket # for new ticket, task # for new task)
+    """
+    endpoint = "service/tickets/" + ticket + "/tasks"
+
+    taskTemplate = json.load(open("./templates/newTaskTemplate.json"))
+    taskTemplate["ticketID"] = ticket
 
 
+    for device in deviceList:
+        taskTemplate["notes"] = device.service + "\n" + device.client + "\n" + device.backup + "\n__________________________________________\n"
+        alertText = ""
 
-    if (len(errorList) == 0):
-        return "None"
-    else:
-        return errorList
+        # Add alerts to task
+        if(device.alerts != "Not Checked"):
+            for alert in device.alerts:
+                # If there are backup alerts, cycle through them and add info to task
+                alertText += "<b>Agent Name: " + alert["name"] + "</b>\n" 
+                if(alert["backupErrors"] != None):
+
+                    alertText += "BACKUP ERRORS: \n"
+                    for x in alert["backupErrors"]:
+                        alertText += "Timestamp: " + str(x["timestamp"]) + "\n"
+                        alertText += "Status: " + str(x["status"]) + "\n"
+                        alertText += "Error: " + str(x["error"]) + "\n"
+                        alertText += "Screenshot: " + str(x["screenshot"]) + "\n"
+                        alertText += "***********************************\n"
+
+                if(alert["localErrors"] != None):
+                    
+                    alertText += "LOCAL ERRORS: \n"
+                    for x in alert["backupErrors"]:
+                        alertText += "Timestamp: " + str(x["timestamp"]) + "\n"
+                        alertText += "Status: " + str(x["status"]) + "\n"
+                        alertText += "Error: " + str(x["error"]) + "\n"
+                        alertText += "Screenshot: " + str(x["screenshot"]) + "\n"
+                        alertText += "***********************************"        
+                taskTemplate["notes"] += str(alertText) + "\n"
+
+        else:
+            taskTemplate["notes"] += str(device.alerts) + "\n"
+
+        
+        managePostAPICall(json.dumps(taskTemplate), endpoint)
+
+    return 
 
 def statusCheck(statusCode):
+    # TODO Implement status check at all API calls. 
+    #  Flesh out error handling
     if (statusCode == 200):
         return True
     elif (statusCode == 403):

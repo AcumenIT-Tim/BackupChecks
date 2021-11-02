@@ -1,0 +1,118 @@
+{
+  "id": 0,
+  "summary": "string",
+  "recordType": "ServiceTicket",
+  "board": {
+    "id": 0,
+    "name": "string"
+  },
+  "status": {
+
+    "name": "Needs Attention"
+  },
+  "workRole": {
+    "id": 98,
+    "name": "Engineer - MSG"
+  },
+  "workType": {
+    "id": 91,
+    "name": "Remote"
+  },
+  "company": {
+    "id": 2,
+    "identifier": "AIT",
+    "name": "Acumen IT"
+  },
+  "site": {
+    "id": 136,
+    "name": "Default"
+
+  },
+
+  "contact": {
+    "id": 0,
+    "name": "string"
+  },
+  "contactEmailAddress": "string",
+
+  "type": {
+
+    "name": "Backup"
+  },
+  "subType": {
+
+    "name": "Backup Check"
+  },
+
+  "team": {
+    "name": "string"
+  },
+
+  "priority": {
+    "id": 10,
+    "name": "Priority 3 - Normal",
+    "sort": 300
+},
+  "severity": "Low",
+  "impact": "Low",
+  "knowledgeBaseCategoryId": 0,
+  "knowledgeBaseSubCategoryId": 0,
+  "initialDescription": "string",
+  "allowAllClientsPortalView": false,
+  "customerUpdatedFlag": false,
+  "automaticEmailContactFlag": true,
+  "automaticEmailResourceFlag": true,
+  "automaticEmailCcFlag": false,
+  "closedFlag": false,
+  "approved": true,
+  "estimatedExpenseCost": 0.00,
+  "estimatedExpenseRevenue": 0.00,
+  "estimatedProductCost": 0.00,
+  "estimatedProductRevenue": 0.00,
+  "estimatedTimeCost": 0.00,
+  "estimatedTimeRevenue": 0.00,
+  "billingMethod": "ActualRates",
+  "subBillingMethod": "ActualRates",
+  "dateResponded": "2021-10-28T05:00:29Z",
+  "resolveMinutes": 0,
+  "resPlanMinutes": 0,
+  "respondMinutes": 0,
+  "isInSla": true,
+  "hasChildTicket": false,
+  "hasMergedChildTicketFlag": false,
+  "billTime": "Billable",
+  "billExpenses": "NoDefault",
+  "billProducts": "Billable",
+
+  "location": {
+    "id": 2,
+    "name": "Greenville"
+},
+
+"department": {
+  "id": 17,
+  "identifier": "Services",
+  "name": "Services"
+
+},
+
+"sla": {
+  "id": 6,
+  "name": "Essentials 2013"
+},
+
+"currency": {
+  "id": 7,
+  "symbol": "$",
+  "currencyCode": "USD",
+  "decimalSeparator": ".",
+  "numberOfDecimals": 2,
+  "thousandsSeparator": ",",
+  "negativeParenthesesFlag": true,
+  "displaySymbolFlag": false,
+  "currencyIdentifier": "USD",
+  "displayIdFlag": false,
+  "rightAlign": false,
+  "name": "US Dollars"
+}
+}
