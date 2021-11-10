@@ -4,10 +4,6 @@ import json
 import csv
 from BackupEntry_Class import BackupEntry as BE
 
-
-
-
-
 def main():
     ticket = createBackupCheckTicket("tech")
     deviceList = createDeviceDictList("tech")
