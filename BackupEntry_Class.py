@@ -2,19 +2,21 @@ import config as cfg
 
 
 class BackupEntry:
-    def __init__(self, client, service, backup):
+    def __init__(self, client, service, backup, serial = "None", notes="None"):
         self.client = client
         self.service = service
         self.backup = backup
-        self.serial = "None"
+        self.serial = serial
+        self.notes  = notes
         self.alerts = "Not Checked"
         self.taskID = "None"
 
     def print(self):
-        print(self.client)
-        print(self.service)
-        print(self.backup)
-        print(self.serial)
-        print(self.alerts)
+        print("Client: ",self.client)
+        print("Service: ",self.service)
+        print("DeviceName: ",self.backup)
+        print("Serial: ",self.serial)
+        print("Notes: ",self.notes)
+        print("Alerts: ",self.alerts)
         print("_______________________________________")
    

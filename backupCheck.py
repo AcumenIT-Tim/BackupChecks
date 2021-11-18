@@ -2,21 +2,36 @@ import requests
 import config as cfg
 import json
 import csv
+import mysql.connector
 from BackupEntry_Class import BackupEntry as BE
 
 def main():
-    ticket = createBackupCheckTicket("tech")
-    deviceList = createDeviceDictList("tech")
+    db = mysql.connector.connect(
+        host     = cfg.mySQL_creds["host"],
+        port     = cfg.mySQL_creds["port"],
+        user     = cfg.mySQL_creds["user"],
+        password = cfg.mySQL_creds["password"],
+        database = cfg.mySQL_creds["database"]
+    )
 
-    deviceList = getDeviceSerials(deviceList)
 
-    for device in deviceList:
-        if(device.serial != "None"):
-            device.alerts = getAlerts(device.serial)
+    for team in range(3):
+        print("Creating ticket for Team " + str(team))
+        ticket     = createBackupCheckTicket(db, 3)
+        print(str(ticket))
+        print("Building device List for Team " + str(team))
+        deviceList = createDeviceDictList(db,team)
 
-    addTasks(deviceList, ticket)
+        print("Getting alerts for Team " + str(team))
+        for device in deviceList:
+            if(device.service == "Datto"):
+                device.alerts = getAlerts(device.serial)
 
-def createBackupCheckTicket(team):
+        print("Adding tasks for Team " + str(team))
+        addTasks(deviceList, ticket)
+        print("Completed Team " + str(team))
+
+def createBackupCheckTicket(dbConn,team):
     """Creates a new ticket in Connectwise Manage on the current team's board. Returns the ticket number
 
     Args:
@@ -24,7 +39,21 @@ def createBackupCheckTicket(team):
 
     Returns:
         [string]: The manage ticket #
+
     """
+
+    cursor =dbConn.cursor()
+    sql = "SELECT * FROM teams WHERE teamID="+str(team)
+
+    try:
+        cursor.execute(sql)
+    except (mysql.connector.Error, mysql.connector.Warning) as e:
+        # TODO Call error handling and do something
+        print(e)
+        return 0
+    
+    # Query results in order: teamID, teamName,teamLead,teamLeadEmail,board
+    contact = cursor.fetchone()
 
     # Json template for a new ticket to be generated
     # summary, [board][name], [contact][name][contactEmailAddress], [team][name], and [initial description]
@@ -33,17 +62,17 @@ def createBackupCheckTicket(team):
 
 
     ticketTemplate["summary"]             = "Test For backup tickets"
-    ticketTemplate["board"]["name"]       = cfg.ticket[team]["board"]
-    ticketTemplate["contact"]["name"]     = cfg.ticket[team]["name"]
-    ticketTemplate["contactEmailAddress"] = cfg.ticket[team]["email"]
-    ticketTemplate["team"]["name"]        = cfg.ticket[team]["team"]
+    ticketTemplate["board"]["name"]       = contact[4]
+    ticketTemplate["contact"]["name"]     = contact[2]
+    ticketTemplate["contactEmailAddress"] = contact[3]
+    ticketTemplate["team"]["name"]        = contact[1]
     ticketTemplate["initialDescription"]  = "Testing the backup tickets"
 
     # API call returns as int, so must be cast as string to be added to endpoints
     return str(managePostAPICall(json.dumps(ticketTemplate), "service/tickets/"))
 
 
-def createDeviceDictList(team):
+def createDeviceDictList(dbConn, team):
     """Reads a CSV file with the corresponding team name that contains client name
     backup provider, and appliance name. Creates a BackupEntry object (found in BackupEntry_Class.py)
     and appends it to a list
@@ -57,55 +86,31 @@ def createDeviceDictList(team):
     # Initiate list object to hold the devices
     list = []
 
-    # Team name passed as arg, should match up with .csv of clients in /Clients/
-    filename = "./Clients/" + team + ".csv"
+    cursor =dbConn.cursor()
+    sql = "SELECT * FROM backups WHERE teamID=" + str(team)
+
+    try:
+        cursor.execute(sql)
+    except (mysql.connector.Error, mysql.connector.Warning) as e:
+        # TODO Call error handling and do something
+        print(e)
+        return 0
+
+    res = cursor.fetchall()
 
     # Open the csv file
-    with open(filename, 'r') as csvfile:
-        csvreader = csv.reader(csvfile)
+    for x in res:
+        client = x[1]
+        service = x[2]
+        name = x[3]
+        serial = x[4]
+        notes = x[6]
 
-        # Skip the header row
-        next(csvreader)
+        # create new object and add to list
+        list.append(BE(client, service, name, serial,notes))
 
-        # Cycle through each row of the csv file
-        for row in csvreader:
-            client = row[0]
-            service = str(row[1])
-            name = str(row[2])
-
-            # create new object and add to list
-            list.append(BE(client, service, name))
-
-            
 
     return list
-
-# Returns a dict of names:serial numbers
-def getDeviceSerials(deviceList):
-    """Takes the list of BackupEntry objects, performs an API call to get the list of devices from Datto
-    and updates the objects with the correct serial numbers. Returns the updated list
-
-    Args:
-        deviceList [list.BE]: List of BackupEntry (BE) objects
-
-    Returns:
-        [list.BE]: List of BackupEntry (BE) objects
-    """
-
-    endpoint = "/bcdr/device?_page=1&_perPage=200&showHiddenDevices=0"
-    # datto API call. Returns JSON results
-    j = dattoAPICall(endpoint)
-
-    # TODO: There has to be a more efficient way to do this
-    # Iterate through all devices returned by API call
-    for asset in j["items"]:
-        # Iterate through all BackupEntries in current check. If name == current device, set serial number
-        for device in deviceList:
-            if(device.service == "datto"):
-                if (device.backup == asset["name"]):
-                    device.serial = asset["serialNumber"]
-
-    return deviceList
 
 def getAlerts(serial):
     """Takes the serial number of a device, performs an API call to get info of all available agents, and returns a list of dicts 
@@ -231,8 +236,6 @@ def manageGetAPICall(endpoint):
 
     return r.json()
 
-   
-
 def managePostAPICall(payload, endpoint):
     """Takes a json payload and api endpoint and performs a POST action to the manage server. Returns POST Id
 
@@ -255,6 +258,7 @@ def managePostAPICall(payload, endpoint):
     return j["id"]
 
 def addTasks(deviceList, ticket):
+
     """Takes a json payload and api endpoint and performs a POST action to the manage server. Returns POST Id
 
     Args:
@@ -271,14 +275,17 @@ def addTasks(deviceList, ticket):
 
 
     for device in deviceList:
-        taskTemplate["notes"] = device.service + "\n" + device.client + "\n" + device.backup + "\n__________________________________________\n"
+        taskTemplate["notes"] = "Name: " + device.client + "\n"
+        taskTemplate["notes"] += "Service: " + device.service + "\n"
+        taskTemplate["notes"] += "Backup Device: " +  device.backup + "\n"
+        taskTemplate["notes"] += "Notes:  "+ device.notes+"\n__________________________________________\n"
         alertText = ""
 
         # Add alerts to task
         if(device.alerts != "Not Checked"):
             for alert in device.alerts:
                 # If there are backup alerts, cycle through them and add info to task
-                alertText += "<b>Agent Name: " + alert["name"] + "</b>\n" 
+                alertText += "Agent Name: " + alert["name"] + "\n" 
                 if(alert["backupErrors"] != None):
 
                     alertText += "BACKUP ERRORS: \n"
@@ -288,7 +295,8 @@ def addTasks(deviceList, ticket):
                         alertText += "Error: " + str(x["error"]) + "\n"
                         alertText += "Screenshot: " + str(x["screenshot"]) + "\n"
                         alertText += "***********************************\n"
-
+                else:
+                    alertText  += "No backup errors found\n"
                 if(alert["localErrors"] != None):
                     
                     alertText += "LOCAL ERRORS: \n"
@@ -297,7 +305,9 @@ def addTasks(deviceList, ticket):
                         alertText += "Status: " + str(x["status"]) + "\n"
                         alertText += "Error: " + str(x["error"]) + "\n"
                         alertText += "Screenshot: " + str(x["screenshot"]) + "\n"
-                        alertText += "***********************************"        
+                        alertText += "***********************************\n"      
+                else:
+                    alertText  += "No backup errors found\n"  
                 taskTemplate["notes"] += str(alertText) + "\n"
 
         else:
@@ -319,6 +329,11 @@ def statusCheck(statusCode):
         return "500 - An error occured"
     else:
         return "unknown error - " + str(statusCode)
+
+def errorHandling():
+    # TODO Add error handling.
+    # Error logging, tech email,etc
+    pass
 
 if __name__ == "__main__":
     main()
