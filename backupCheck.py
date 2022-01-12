@@ -225,7 +225,9 @@ def dattoAPICall(endpoint):
         r = requests.get(cfg.datto_api["server"] + endpoint, auth=(cfg.datto_api["public"], cfg.datto_api["private"]))
         r.raise_for_status()
     except:
-        print(r.text)
+        f = open("errorlog.txt","a")
+        f.write(r.text)
+        f.close
         raise
 
     return r.json()
@@ -236,7 +238,9 @@ def manageGetAPICall(endpoint):
         # request has been made
         r.raise_for_status()
     except:
-        print(r.text)
+        f = open("errorlog.txt","a")
+        f.write(r.text)
+        f.close
         raise
 
     return r.json()
