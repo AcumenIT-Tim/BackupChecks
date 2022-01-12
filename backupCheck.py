@@ -4,6 +4,7 @@ import json
 import csv
 import mysql.connector
 from BackupEntry_Class import BackupEntry as BE
+from pathlib import Path
 
 def main():
     db = mysql.connector.connect(
@@ -58,7 +59,9 @@ def createBackupCheckTicket(dbConn,team):
     # Json template for a new ticket to be generated
     # summary, [board][name], [contact][name][contactEmailAddress], [team][name], and [initial description]
     # need to be set
-    ticketTemplate = json.load(open("BackupChecks\\templates\\newCheckTemplate.json"))
+    path = Path(__file__).parent / "./templates/newCheckTemplate.json"
+    with path.open() as f:
+        ticketTemplate = json.load(f)
 
 
     ticketTemplate["summary"]             = "(TESTING)" + contact[1] + " Automated backup checks"
@@ -272,7 +275,11 @@ def addTasks(deviceList, ticket):
     """
     endpoint = "service/tickets/" + ticket + "/tasks"
 
-    taskTemplate = json.load(open("BackupChecks\\templates\\newTaskTemplate.json"))
+    path = Path(__file__).parent / "./templates/newTaskTemplate.json"
+    with path.open() as f:
+        taskTemplate = json.load(f)
+
+
     taskTemplate["ticketID"] = ticket
 
 
