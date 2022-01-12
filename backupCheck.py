@@ -58,17 +58,21 @@ def createBackupCheckTicket(dbConn,team):
     # Json template for a new ticket to be generated
     # summary, [board][name], [contact][name][contactEmailAddress], [team][name], and [initial description]
     # need to be set
-    ticketTemplate = json.load(open("./templates/newCheckTemplate.json"))
+    ticketTemplate = json.load(open("BackupChecks\\templates\\newCheckTemplate.json"))
 
 
-    ticketTemplate["summary"]             = "Test For backup tickets"
+    ticketTemplate["summary"]             = "(TESTING)" + contact[1] + " Automated backup checks"
     ticketTemplate["board"]["name"]       = contact[4]
     ticketTemplate["contact"]["name"]     = contact[2]
     ticketTemplate["contactEmailAddress"] = contact[3]
     ticketTemplate["team"]["name"]        = contact[1]
-    ticketTemplate["initialDescription"]  = "Testing the backup tickets"
+    ticketTemplate["initialDescription"]  = """I am testing semi-automated backup checks. This 1st version should automatically
+    check backups in Datto and, if any errors are detected, add a summary in tasks. While it is in Beta, please continue backup checks
+    as normal and cross reference with this ticket. If you find any differences please let me know. - Tim"""
 
     # API call returns as int, so must be cast as string to be added to endpoints
+
+
     return str(managePostAPICall(json.dumps(ticketTemplate), "service/tickets/"))
 
 
@@ -163,8 +167,6 @@ def getAlerts(serial):
             
 def checkBackups(device):   
     # TODO: Add Time of latest error and check against current time to not report on resolved issues
-
-
 
     # Initiate empty lists to hold error dicts
     errorList       = {
@@ -270,7 +272,7 @@ def addTasks(deviceList, ticket):
     """
     endpoint = "service/tickets/" + ticket + "/tasks"
 
-    taskTemplate = json.load(open("./templates/newTaskTemplate.json"))
+    taskTemplate = json.load(open("BackupChecks\\templates\\newTaskTemplate.json"))
     taskTemplate["ticketID"] = ticket
 
 
@@ -278,36 +280,41 @@ def addTasks(deviceList, ticket):
         taskTemplate["notes"] = "Name: " + device.client + "\n"
         taskTemplate["notes"] += "Service: " + device.service + "\n"
         taskTemplate["notes"] += "Backup Device: " +  device.backup + "\n"
-        taskTemplate["notes"] += "Notes:  "+ device.notes+"\n__________________________________________\n"
+        taskTemplate["notes"] += "Notes:  "+ str(device.notes)+"\n__________________________________________\n"
         alertText = ""
 
         # Add alerts to task
         if(device.alerts != "Not Checked"):
-            for alert in device.alerts:
-                # If there are backup alerts, cycle through them and add info to task
-                alertText += "Agent Name: " + alert["name"] + "\n" 
-                if(alert["backupErrors"] != None):
+            if(len(device.alerts) > 0):
+                for alert in device.alerts:
+                    # If there are backup alerts, cycle through them and add info to task
+                    alertText += "Agent Name: " + alert["name"] + "\n" 
+                    print(len(alert["backupErrors"]))
+                    if(len(alert["backupErrors"]) > 0):
 
-                    alertText += "BACKUP ERRORS: \n"
-                    for x in alert["backupErrors"]:
-                        alertText += "Timestamp: " + str(x["timestamp"]) + "\n"
-                        alertText += "Status: " + str(x["status"]) + "\n"
-                        alertText += "Error: " + str(x["error"]) + "\n"
-                        alertText += "Screenshot: " + str(x["screenshot"]) + "\n"
-                        alertText += "***********************************\n"
-                else:
-                    alertText  += "No backup errors found\n"
-                if(alert["localErrors"] != None):
-                    
-                    alertText += "LOCAL ERRORS: \n"
-                    for x in alert["backupErrors"]:
-                        alertText += "Timestamp: " + str(x["timestamp"]) + "\n"
-                        alertText += "Status: " + str(x["status"]) + "\n"
-                        alertText += "Error: " + str(x["error"]) + "\n"
-                        alertText += "Screenshot: " + str(x["screenshot"]) + "\n"
-                        alertText += "***********************************\n"      
-                else:
-                    alertText  += "No backup errors found\n"  
+                        alertText += "BACKUP ERRORS: \n"
+                        for x in alert["backupErrors"]:
+                            alertText += "Timestamp: " + str(x["timestamp"]) + "\n"
+                            alertText += "Status: " + str(x["status"]) + "\n"
+                            alertText += "Error: " + str(x["error"]) + "\n"
+                            alertText += "Screenshot: " + str(x["screenshot"]) + "\n"
+                            alertText += "***********************************\n"
+                    else:
+                        alertText  += "No backup errors found\n"
+                    if(alert["localErrors"] != None):
+                        
+                        alertText += "LOCAL ERRORS: \n"
+                        for x in alert["backupErrors"]:
+                            alertText += "Timestamp: " + str(x["timestamp"]) + "\n"
+                            alertText += "Status: " + str(x["status"]) + "\n"
+                            alertText += "Error: " + str(x["error"]) + "\n"
+                            alertText += "Screenshot: " + str(x["screenshot"]) + "\n"
+                            alertText += "***********************************\n"      
+                    else:
+                        alertText  += "No backup errors found\n"  
+                    taskTemplate["notes"] += str(alertText) + "\n"
+            else:
+                alertText = "No backup errors found\n"
                 taskTemplate["notes"] += str(alertText) + "\n"
 
         else:
