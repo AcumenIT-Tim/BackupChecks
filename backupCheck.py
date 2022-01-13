@@ -18,7 +18,7 @@ def main():
 
     for team in range(3):
         print("Creating ticket for Team " + str(team))
-        ticket     = createBackupCheckTicket(db, 3)
+        ticket     = createBackupCheckTicket(db, team)
         print(str(ticket))
         print("Building device List for Team " + str(team))
         deviceList = createDeviceDictList(db,team)
